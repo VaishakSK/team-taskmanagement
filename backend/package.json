@@ -1,0 +1,31 @@
+{
+  "name": "team-task-management-backend",
+  "version": "1.0.0",
+  "description": "Backend for Team and Task Management System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "server": "nodemon server.js",
+    "migrate": "node scripts/migrate.js",
+    "migrate:assignees": "node scripts/add_task_assignees_table.js",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "express-validator": "^7.0.1",
+    "google-auth-library": "^9.2.0",
+    "nodemailer": "^6.9.7",
+    "otp-generator": "^4.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "nodemon": "^3.0.2"
+  }
+}

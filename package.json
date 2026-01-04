@@ -1,0 +1,21 @@
+{
+  "name": "team-task-management",
+  "version": "1.0.0",
+  "description": "Team and Task Management System with Role-Based Access Control",
+  "main": "server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "nodemon backend/server.js",
+    "client": "cd task && npm run dev",
+    "test": "jest",
+    "test:backend": "cd backend && jest",
+    "test:frontend": "cd task && npm test"
+  },
+  "keywords": ["team", "task", "management", "rbac"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.2"
+  }
+}
