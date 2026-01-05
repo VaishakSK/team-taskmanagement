@@ -148,10 +148,17 @@ router.post('/google', async (req, res) => {
       );
     }
 
-    // Send OTP email asynchronously (don't wait for it)
-    sendOTP(email, otp).catch(err => {
-      console.error('Error sending OTP email (non-blocking):', err);
-    });
+    // Send OTP email synchronously to catch errors
+    try {
+      await sendOTP(email, otp);
+      console.log('OTP sent successfully to:', email);
+    } catch (emailError) {
+      console.error('Failed to send OTP email for Google signup:', emailError);
+      return res.status(500).json({ 
+        error: 'Failed to send OTP email. Please try again.',
+        details: emailError.message 
+      });
+    }
 
     // Return immediately after storing OTP
     res.json({ 
@@ -269,7 +276,17 @@ router.post(
         [otp, expiresAt, email]
       );
 
-      await sendOTP(email, otp);
+      // Send OTP email synchronously to catch errors
+      try {
+        await sendOTP(email, otp);
+        console.log('OTP sent successfully to:', email);
+      } catch (emailError) {
+        console.error('Failed to send OTP email:', emailError);
+        return res.status(500).json({ 
+          error: 'Failed to send OTP email. Please try again.',
+          details: emailError.message 
+        });
+      }
 
       res.json({ message: 'OTP sent to your email' });
     } catch (error) {
@@ -412,10 +429,17 @@ router.post(
         );
       }
 
-      // Send OTP email asynchronously (don't wait for it)
-      sendOTP(email, otp).catch(err => {
-        console.error('Error sending OTP email (non-blocking):', err);
-      });
+      // Send OTP email synchronously to catch errors
+      try {
+        await sendOTP(email, otp);
+        console.log('OTP sent successfully to:', email);
+      } catch (emailError) {
+        console.error('Failed to send OTP email for signup:', emailError);
+        return res.status(500).json({ 
+          error: 'Failed to send OTP email. Please try again.',
+          details: emailError.message 
+        });
+      }
 
       // Return immediately after storing OTP
       res.json({ message: 'OTP sent to your email. Please verify to complete signup.' });
@@ -536,6 +560,34 @@ router.get('/me', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Get current user error:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Test email endpoint (for debugging)
+router.post('/test-email', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required for testing' });
+    }
+
+    const testOtp = '123456';
+    await sendOTP(email, testOtp);
+    
+    console.log('Test email sent successfully to:', email);
+    res.json({ 
+      message: 'Test email sent successfully',
+      email: email,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Test email failed:', error);
+    res.status(500).json({ 
+      error: 'Email configuration error', 
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
