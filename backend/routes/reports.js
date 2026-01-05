@@ -7,7 +7,7 @@ const router = express.Router();
 // Get reports with graph-friendly data (Admin/Manager only)
 router.get('/', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
-    const { type, team_id, start_date, end_date } = req.query;
+    const { type, team_id, start_date, end_date, task_id, user_id } = req.query;
 
     let reports = {};
 
@@ -37,6 +37,23 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req, res) =>
       taskParams.push(end_date);
     }
 
+    if (task_id) {
+      taskQuery += ` AND id = $${paramCount++}`;
+      taskParams.push(task_id);
+    }
+
+    if (user_id) {
+      taskQuery += ` AND (
+        assigned_to = $${paramCount}
+        OR EXISTS (
+          SELECT 1 FROM task_assignees ta
+          WHERE ta.task_id = tasks.id AND ta.user_id = $${paramCount}
+        )
+      )`;
+      taskParams.push(user_id);
+      paramCount++;
+    }
+
     // Managers can only see reports for their teams
     if (req.user.role === 'manager') {
       taskQuery += ` AND (created_by = $${paramCount} OR team_id IN (SELECT id FROM teams WHERE manager_id = $${paramCount}))`;
@@ -64,20 +81,61 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req, res) =>
     };
 
     // Tasks Over Time (Line Chart Data) - Last 30 days
-    const tasksOverTimeQuery = `
+    let tasksOverTimeQuery = `
       SELECT 
         DATE(created_at) as date,
         COUNT(*) as count,
         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
       FROM tasks
-      WHERE created_at >= NOW() - INTERVAL '30 days'
-      ${req.user.role === 'manager' ? `AND (created_by = $1 OR team_id IN (SELECT id FROM teams WHERE manager_id = $1))` : ''}
-      ${team_id ? `AND team_id = $${req.user.role === 'manager' ? '2' : '1'}` : ''}
-      GROUP BY DATE(created_at)
-      ORDER BY date ASC
+      WHERE 1=1
     `;
-    const timeParams = req.user.role === 'manager' ? [req.user.id] : [];
-    if (team_id) timeParams.push(team_id);
+    const timeParams = [];
+    paramCount = 1;
+
+    if (start_date) {
+      tasksOverTimeQuery += ` AND created_at >= $${paramCount++}`;
+      timeParams.push(start_date);
+    } else {
+      tasksOverTimeQuery += ` AND created_at >= NOW() - INTERVAL '30 days'`;
+    }
+
+    if (end_date) {
+      tasksOverTimeQuery += ` AND created_at <= $${paramCount++}`;
+      timeParams.push(end_date);
+    }
+
+    if (team_id) {
+      tasksOverTimeQuery += ` AND team_id = $${paramCount++}`;
+      timeParams.push(team_id);
+    }
+
+    if (task_id) {
+      tasksOverTimeQuery += ` AND id = $${paramCount++}`;
+      timeParams.push(task_id);
+    }
+
+    if (user_id) {
+      tasksOverTimeQuery += ` AND (
+        assigned_to = $${paramCount}
+        OR EXISTS (
+          SELECT 1 FROM task_assignees ta
+          WHERE ta.task_id = tasks.id AND ta.user_id = $${paramCount}
+        )
+      )`;
+      timeParams.push(user_id);
+      paramCount++;
+    }
+
+    if (req.user.role === 'manager') {
+      tasksOverTimeQuery += ` AND (
+        created_by = $${paramCount}
+        OR team_id IN (SELECT id FROM teams WHERE manager_id = $${paramCount})
+      )`;
+      timeParams.push(req.user.id);
+      paramCount++;
+    }
+
+    tasksOverTimeQuery += ` GROUP BY DATE(created_at) ORDER BY date ASC`;
     
     const tasksOverTime = await pool.query(tasksOverTimeQuery, timeParams);
     reports.tasksOverTime = {
@@ -112,6 +170,34 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req, res) =>
     if (team_id) {
       teamQuery += ` AND t.id = $${paramCount++}`;
       teamParams.push(team_id);
+    }
+
+    if (start_date) {
+      teamQuery += ` AND (tk.id IS NULL OR tk.created_at >= $${paramCount++})`;
+      teamParams.push(start_date);
+    }
+
+    if (end_date) {
+      teamQuery += ` AND (tk.id IS NULL OR tk.created_at <= $${paramCount++})`;
+      teamParams.push(end_date);
+    }
+
+    if (task_id) {
+      teamQuery += ` AND (tk.id IS NULL OR tk.id = $${paramCount++})`;
+      teamParams.push(task_id);
+    }
+
+    if (user_id) {
+      teamQuery += ` AND (
+        tk.id IS NULL
+        OR tk.assigned_to = $${paramCount}
+        OR EXISTS (
+          SELECT 1 FROM task_assignees ta
+          WHERE ta.task_id = tk.id AND ta.user_id = $${paramCount}
+        )
+      )`;
+      teamParams.push(user_id);
+      paramCount++;
     }
 
     teamQuery += ` GROUP BY t.id, t.name ORDER BY t.name`;
@@ -149,6 +235,41 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req, res) =>
       userParams.push(team_id);
     }
 
+    if (start_date) {
+      userQuery += ` AND (t.id IS NULL OR t.created_at >= $${paramCount++})`;
+      userParams.push(start_date);
+    }
+
+    if (end_date) {
+      userQuery += ` AND (t.id IS NULL OR t.created_at <= $${paramCount++})`;
+      userParams.push(end_date);
+    }
+
+    if (task_id) {
+      userQuery += ` AND (t.id IS NULL OR t.id = $${paramCount++})`;
+      userParams.push(task_id);
+    }
+
+    if (user_id) {
+      userQuery += ` AND u.id = $${paramCount++}`;
+      userParams.push(user_id);
+    }
+
+    if (team_id) {
+      userQuery += ` AND (t.id IS NULL OR t.team_id = $${paramCount++})`;
+      userParams.push(team_id);
+    }
+
+    if (req.user.role === 'manager') {
+      userQuery += ` AND (
+        t.id IS NULL
+        OR t.created_by = $${paramCount}
+        OR t.team_id IN (SELECT id FROM teams WHERE manager_id = $${paramCount})
+      )`;
+      userParams.push(req.user.id);
+      paramCount++;
+    }
+
     userQuery += ` GROUP BY u.id, u.name, u.email HAVING COUNT(DISTINCT t.id) > 0 ORDER BY total_tasks DESC LIMIT 10`;
 
     const userStats = await pool.query(userQuery, userParams);
@@ -161,17 +282,63 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req, res) =>
     };
 
     // Activity Log Summary (Line Chart - Activities over time)
-    const activityQuery = `
+    let activityQuery = `
       SELECT 
         DATE(created_at) as date,
         action_type,
         COUNT(*) as count
       FROM activity_logs
-      WHERE created_at >= NOW() - INTERVAL '30 days'
+      WHERE 1=1
+    `;
+    const activityParams = [];
+    paramCount = 1;
+
+    if (start_date) {
+      activityQuery += ` AND created_at >= $${paramCount++}`;
+      activityParams.push(start_date);
+    } else {
+      activityQuery += ` AND created_at >= NOW() - INTERVAL '30 days'`;
+    }
+
+    if (end_date) {
+      activityQuery += ` AND created_at <= $${paramCount++}`;
+      activityParams.push(end_date);
+    }
+
+    if (user_id) {
+      activityQuery += ` AND user_id = $${paramCount++}`;
+      activityParams.push(user_id);
+    }
+
+    if (task_id) {
+      activityQuery += ` AND entity_type = 'task' AND entity_id = $${paramCount++}`;
+      activityParams.push(task_id);
+    }
+
+    if (team_id) {
+      activityQuery += ` AND (
+        (entity_type = 'team' AND entity_id = $${paramCount})
+        OR (entity_type = 'task' AND entity_id IN (SELECT id FROM tasks WHERE team_id = $${paramCount}))
+      )`;
+      activityParams.push(team_id);
+      paramCount++;
+    }
+
+    if (req.user.role === 'manager') {
+      activityQuery += ` AND (
+        user_id = $${paramCount}
+        OR (entity_type = 'team' AND entity_id IN (SELECT id FROM teams WHERE manager_id = $${paramCount}))
+        OR (entity_type = 'task' AND entity_id IN (SELECT id FROM tasks WHERE team_id IN (SELECT id FROM teams WHERE manager_id = $${paramCount})))
+      )`;
+      activityParams.push(req.user.id);
+      paramCount++;
+    }
+
+    activityQuery += `
       GROUP BY DATE(created_at), action_type
       ORDER BY date ASC, action_type
     `;
-    const activities = await pool.query(activityQuery);
+    const activities = await pool.query(activityQuery, activityParams);
     
     // Group by date
     const activityMap = {};

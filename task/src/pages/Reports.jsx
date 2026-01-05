@@ -38,7 +38,12 @@ const Reports = () => {
   const [reports, setReports] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedTeam, setSelectedTeam] = useState('');
+  const [selectedTask, setSelectedTask] = useState('');
+  const [selectedUser, setSelectedUser] = useState('');
   const [teams, setTeams] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [teamMemberIds, setTeamMemberIds] = useState(null);
   const [dateRange, setDateRange] = useState({
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0]
@@ -49,8 +54,60 @@ const Reports = () => {
       return;
     }
     fetchTeams();
+    fetchTasks();
+    fetchUsers();
+  }, [isManager, isAdmin]);
+
+  useEffect(() => {
+    if (!isManager && !isAdmin) {
+      return;
+    }
     fetchReports();
-  }, [isManager, isAdmin, selectedTeam, dateRange]);
+  }, [isManager, isAdmin, selectedTeam, selectedTask, selectedUser, dateRange]);
+
+  useEffect(() => {
+    if (!isManager && !isAdmin) {
+      return;
+    }
+
+    if (!selectedTeam) {
+      setTeamMemberIds(null);
+      return;
+    }
+
+    const fetchTeamMembers = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/api/teams/${selectedTeam}`);
+        const ids = (response.data.members || []).map((m) => m.id);
+        setTeamMemberIds(ids);
+      } catch (error) {
+        console.error('Error fetching team members:', error);
+        setTeamMemberIds(null);
+      }
+    };
+
+    fetchTeamMembers();
+  }, [isManager, isAdmin, selectedTeam]);
+
+  useEffect(() => {
+    if (!selectedTeam) {
+      return;
+    }
+
+    if (selectedTask) {
+      const inTeam = tasks.some((t) => String(t.id) === String(selectedTask) && String(t.team_id) === String(selectedTeam));
+      if (!inTeam) {
+        setSelectedTask('');
+      }
+    }
+
+    if (selectedUser && Array.isArray(teamMemberIds)) {
+      const isMember = teamMemberIds.includes(Number(selectedUser)) || teamMemberIds.includes(selectedUser);
+      if (!isMember) {
+        setSelectedUser('');
+      }
+    }
+  }, [selectedTeam, selectedTask, selectedUser, tasks, teamMemberIds]);
 
   const fetchTeams = async () => {
     try {
@@ -61,11 +118,31 @@ const Reports = () => {
     }
   };
 
+  const fetchTasks = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/tasks`);
+      setTasks(response.data.tasks || []);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/users`);
+      setUsers(response.data.users || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
+
   const fetchReports = async () => {
     try {
       setLoading(true);
       const params = {};
       if (selectedTeam) params.team_id = selectedTeam;
+      if (selectedTask) params.task_id = selectedTask;
+      if (selectedUser) params.user_id = selectedUser;
       if (dateRange.start) params.start_date = dateRange.start;
       if (dateRange.end) params.end_date = dateRange.end;
 
@@ -77,6 +154,14 @@ const Reports = () => {
       setLoading(false);
     }
   };
+
+  const tasksForSelect = selectedTeam
+    ? tasks.filter((t) => String(t.team_id) === String(selectedTeam))
+    : tasks;
+
+  const usersForSelect = teamMemberIds
+    ? users.filter((u) => teamMemberIds.includes(u.id))
+    : users;
 
   if (!isManager && !isAdmin) {
     return (
@@ -269,6 +354,39 @@ const Reports = () => {
             ))}
           </select>
         </div>
+
+        <div className="filter-group">
+          <label className="filter-label">Filter by Task</label>
+          <select
+            className="filter-select"
+            value={selectedTask}
+            onChange={(e) => setSelectedTask(e.target.value)}
+          >
+            <option value="">All Tasks</option>
+            {tasksForSelect.map((task) => (
+              <option key={task.id} value={task.id}>
+                {task.title || `Task #${task.id}`}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="filter-group">
+          <label className="filter-label">Filter by User</label>
+          <select
+            className="filter-select"
+            value={selectedUser}
+            onChange={(e) => setSelectedUser(e.target.value)}
+          >
+            <option value="">All Users</option>
+            {usersForSelect.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.role})
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="filter-group">
           <label className="filter-label">Start Date</label>
           <input
