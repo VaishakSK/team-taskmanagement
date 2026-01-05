@@ -39,6 +39,16 @@ app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+/* -------------------- SECURITY HEADERS -------------------- */
+
+app.use((req, res, next) => {
+  res.setHeader(
+    "Cross-Origin-Opener-Policy",
+    "same-origin-allow-popups"
+  );
+  next();
+});
+
 /* -------------------- ROUTES -------------------- */
 
 app.use('/api/auth', require('./routes/auth'));
