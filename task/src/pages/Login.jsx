@@ -129,16 +129,29 @@ const Login = () => {
   };
 
   return (
-    <div className="auth-container">
-      {showNotification && (
-        <Notification
-          message={notificationMessage}
-          type="success"
-          onClose={() => setShowNotification(false)}
-          duration={2000}
-        />
-      )}
-      <div className="auth-content">
+    <>
+      <header className="homepage-header auth-homepage-header">
+        <div className="homepage-header-content">
+          <button
+            type="button"
+            className="homepage-logo-text homepage-logo-button"
+            onClick={() => navigate('/')}
+            aria-label="Go to homepage"
+          >
+            Task Manager
+          </button>
+        </div>
+      </header>
+      <div className="auth-container">
+        {showNotification && (
+          <Notification
+            message={notificationMessage}
+            type="success"
+            onClose={() => setShowNotification(false)}
+            duration={2000}
+          />
+        )}
+        <div className="auth-content">
         <div className="auth-left-panel">
           <div className="auth-branding">
             <h1 className="auth-brand-title">Welcome Back!</h1>
@@ -257,7 +270,8 @@ const Login = () => {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 };
 

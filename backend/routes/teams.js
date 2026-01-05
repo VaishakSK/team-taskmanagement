@@ -2,6 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { logActivity } = require('../middleware/activityLogger');
 
 const router = express.Router();
 
@@ -151,6 +152,21 @@ router.post(
         }
       }
 
+      // Log activity
+      try {
+        const memberCount = member_ids && member_ids.length > 0 ? member_ids.length : 0;
+        await logActivity(
+          req,
+          'team_created',
+          'team',
+          team.id,
+          `Created team "${name}" with ${memberCount} member${memberCount !== 1 ? 's' : ''}`,
+          { team_id: team.id, name, member_count: memberCount }
+        );
+      } catch (logError) {
+        console.error('Error logging activity:', logError);
+      }
+
       res.status(201).json({ team });
     } catch (error) {
       console.error('Create team error:', error);
@@ -228,7 +244,34 @@ router.put(
         return res.status(404).json({ error: 'Team not found' });
       }
 
-      res.json({ team: result.rows[0] });
+      const updatedTeam = result.rows[0];
+
+      // Log activity
+      try {
+        const changes = [];
+        if (name && name !== team.name) changes.push(`name: "${team.name}" → "${name}"`);
+        if (description !== undefined && description !== team.description) changes.push('description updated');
+        if (manager_id !== undefined && manager_id !== team.manager_id) {
+          const oldManager = team.manager_id ? (await pool.query('SELECT name FROM users WHERE id = $1', [team.manager_id])).rows[0]?.name : 'None';
+          const newManager = manager_id ? (await pool.query('SELECT name FROM users WHERE id = $1', [manager_id])).rows[0]?.name : 'None';
+          changes.push(`manager: ${oldManager} → ${newManager}`);
+        }
+
+        if (changes.length > 0) {
+          await logActivity(
+            req,
+            'team_updated',
+            'team',
+            id,
+            `Updated team "${updatedTeam.name || team.name}": ${changes.join(', ')}`,
+            { team_id: id, changes }
+          );
+        }
+      } catch (logError) {
+        console.error('Error logging activity:', logError);
+      }
+
+      res.json({ team: updatedTeam });
     } catch (error) {
       console.error('Update team error:', error);
       res.status(500).json({ error: 'Server error' });
@@ -289,6 +332,22 @@ router.post(
         [id, user_id]
       );
 
+      // Log activity
+      try {
+        const user = await pool.query('SELECT name FROM users WHERE id = $1', [user_id]);
+        const team = await pool.query('SELECT name FROM teams WHERE id = $1', [id]);
+        await logActivity(
+          req,
+          'team_member_added',
+          'team',
+          id,
+          `Added ${user.rows[0]?.name || 'user'} to team "${team.rows[0]?.name || 'team'}"`,
+          { team_id: id, user_id, team_name: team.rows[0]?.name, user_name: user.rows[0]?.name }
+        );
+      } catch (logError) {
+        console.error('Error logging activity:', logError);
+      }
+
       res.json({ message: 'Member added to team successfully' });
     } catch (error) {
       console.error('Add member error:', error);
@@ -327,6 +386,34 @@ router.delete(
 
       if (result.rowCount === 0) {
         return res.status(404).json({ error: 'Member not found in team' });
+      }
+
+      // Log activity
+      const user = await pool.query('SELECT name FROM users WHERE id = $1', [userId]);
+      const team = await pool.query('SELECT name FROM teams WHERE id = $1', [id]);
+      await logActivity(
+        req,
+        'team_member_removed',
+        'team',
+        id,
+        `Removed ${user.rows[0]?.name || 'user'} from team "${team.rows[0]?.name || 'team'}"`,
+        { team_id: id, user_id: userId, team_name: team.rows[0]?.name, user_name: user.rows[0]?.name }
+      );
+
+      // Log activity
+      try {
+        const user = await pool.query('SELECT name FROM users WHERE id = $1', [userId]);
+        const team = await pool.query('SELECT name FROM teams WHERE id = $1', [id]);
+        await logActivity(
+          req,
+          'team_member_removed',
+          'team',
+          id,
+          `Removed ${user.rows[0]?.name || 'user'} from team "${team.rows[0]?.name || 'team'}"`,
+          { team_id: id, user_id: userId, team_name: team.rows[0]?.name, user_name: user.rows[0]?.name }
+        );
+      } catch (logError) {
+        console.error('Error logging activity:', logError);
       }
 
       res.json({ message: 'Member removed from team successfully' });

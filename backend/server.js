@@ -46,6 +46,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/teams', require('./routes/teams'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/activity-logs', require('./routes/activityLogs'));
 
 /* -------------------- HEALTH CHECK -------------------- */
 

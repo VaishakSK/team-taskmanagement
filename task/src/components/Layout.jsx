@@ -8,7 +8,8 @@ const Layout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAdmin, isManager } = useAuth();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const menuItems = [
@@ -25,25 +26,38 @@ const Layout = () => {
     setUserMenuOpen(false);
   };
 
+  const handleSidebarToggle = () => {
+    const isSmallScreen = window.matchMedia('(max-width: 768px)').matches;
+
+    if (isSmallScreen) {
+      setSidebarOpen((prev) => !prev);
+      return;
+    }
+
+    setSidebarCollapsed((prev) => !prev);
+  };
+
   return (
-    <div className="layout">
+    <div className={`layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <header className="header">
         <div className="header-content">
-          <button 
-            className="mobile-menu-btn"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            ☰
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <h1 className="header-title">Task Manager</h1>
-            {user && user.role && (
-              <span className={`chip ${user.role === 'admin' ? 'chip-error' : user.role === 'manager' ? 'chip-warning' : 'chip-primary'}`} 
-                    style={{ fontSize: '11px', padding: '4px 10px', fontWeight: 600 }}>
-                {user.role.toUpperCase()}
-              </span>
-            )}
+          <div className="header-left">
+            <button 
+              className="mobile-menu-btn"
+              onClick={handleSidebarToggle}
+              aria-label="Toggle menu"
+            >
+              ☰
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <h1 className="header-title">Task Manager</h1>
+              {user && user.role && (
+                <span className={`chip ${user.role === 'admin' ? 'chip-error' : user.role === 'manager' ? 'chip-warning' : 'chip-primary'}`} 
+                      style={{ fontSize: '11px', padding: '4px 10px', fontWeight: 600 }}>
+                  {user.role.toUpperCase()}
+                </span>
+              )}
+            </div>
           </div>
           <div className="header-user">
             <span className="user-name">{user?.name}</span>
@@ -72,7 +86,7 @@ const Layout = () => {
       </header>
 
       <div className="layout-body">
-        <aside className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
+        <aside className={`sidebar ${sidebarOpen ? 'open' : ''} ${sidebarCollapsed ? 'collapsed' : ''}`}>
           <nav className="sidebar-nav">
             {menuItems.map((item) => (
               <button
@@ -80,7 +94,7 @@ const Layout = () => {
                 className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
                 onClick={() => {
                   navigate(item.path);
-                  setMobileMenuOpen(false);
+                  setSidebarOpen(false);
                 }}
               >
                 <span className="nav-icon">{item.icon}</span>
@@ -98,15 +112,15 @@ const Layout = () => {
           </nav>
         </aside>
 
-        <main className="main-content">
+        <main className={`main-content ${sidebarCollapsed ? 'collapsed' : ''}`}>
           <Outlet />
         </main>
       </div>
 
-      {mobileMenuOpen && (
+      {sidebarOpen && (
         <div 
           className="mobile-overlay"
-          onClick={() => setMobileMenuOpen(false)}
+          onClick={() => setSidebarOpen(false)}
         ></div>
       )}
     </div>

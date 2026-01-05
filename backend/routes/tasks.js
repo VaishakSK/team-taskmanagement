@@ -2,6 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { logActivity } = require('../middleware/activityLogger');
 
 const router = express.Router();
 
@@ -246,6 +247,25 @@ router.post(
         }
       }
 
+      // Log activity
+      try {
+        const assigneeNames = assigneeIds.length > 0 
+          ? (await pool.query('SELECT name FROM users WHERE id = ANY($1::int[])', [assigneeIds])).rows.map(u => u.name).join(', ')
+          : 'Unassigned';
+        const teamName = team_id ? (await pool.query('SELECT name FROM teams WHERE id = $1', [team_id])).rows[0]?.name : null;
+        
+        await logActivity(
+          req,
+          'task_created',
+          'task',
+          task.id,
+          `Created task "${title}"${teamName ? ` in team "${teamName}"` : ''}${assigneeIds.length > 0 ? ` and assigned to ${assigneeNames}` : ''}`,
+          { task_id: task.id, title, team_id, assignee_ids: assigneeIds }
+        );
+      } catch (logError) {
+        console.error('Error logging activity:', logError);
+      }
+
       res.status(201).json({ task });
     } catch (error) {
       console.error('Create task error:', error);
@@ -428,6 +448,38 @@ router.put(
       );
       updatedTask.assignees = assigneesResult.rows;
 
+      // Log activity
+      try {
+        const changes = [];
+        if (title && title !== task.title) changes.push(`title: "${task.title}" → "${title}"`);
+        if (description !== undefined && description !== task.description) changes.push('description updated');
+        if (req.body.assigned_user_ids !== undefined || assigned_to !== undefined) {
+          const oldAssignees = task.assignees ? task.assignees.map(a => a.name) : [];
+          const newAssignees = updatedTask.assignees.map(a => a.name);
+          if (JSON.stringify(oldAssignees.sort()) !== JSON.stringify(newAssignees.sort())) {
+            changes.push(`assignees: ${oldAssignees.join(', ') || 'None'} → ${newAssignees.join(', ') || 'None'}`);
+          }
+        }
+        if (team_id !== undefined && team_id !== task.team_id) {
+          const oldTeam = task.team_id ? (await pool.query('SELECT name FROM teams WHERE id = $1', [task.team_id])).rows[0]?.name : 'None';
+          const newTeam = team_id ? (await pool.query('SELECT name FROM teams WHERE id = $1', [team_id])).rows[0]?.name : 'None';
+          changes.push(`team: ${oldTeam} → ${newTeam}`);
+        }
+
+        if (changes.length > 0) {
+          await logActivity(
+            req,
+            'task_updated',
+            'task',
+            id,
+            `Updated task "${updatedTask.title || task.title}": ${changes.join(', ')}`,
+            { task_id: id, changes }
+          );
+        }
+      } catch (logError) {
+        console.error('Error logging activity:', logError);
+      }
+
       res.json({ task: updatedTask });
     } catch (error) {
       console.error('Update task error:', error);
@@ -464,10 +516,25 @@ router.patch(
         return res.status(403).json({ error: 'Access denied. You can only update tasks assigned to you.' });
       }
 
+      const oldStatus = task.status;
       const result = await pool.query(
         `UPDATE tasks SET status = $1 WHERE id = $2 RETURNING *`,
         [status, id]
       );
+
+      // Log activity
+      try {
+        await logActivity(
+          req,
+          'task_status_updated',
+          'task',
+          id,
+          `Changed task "${task.title}" status from ${oldStatus} to ${status}`,
+          { task_id: id, old_status: oldStatus, new_status: status }
+        );
+      } catch (logError) {
+        console.error('Error logging activity:', logError);
+      }
 
       res.json({ task: result.rows[0] });
     } catch (error) {
@@ -492,6 +559,20 @@ router.delete('/:id', authenticate, authorize('admin', 'manager'), async (req, r
 
     // Managers and Admins can delete any task (authorize middleware already ensures only admin/manager can access this route)
     // No additional restrictions needed
+
+    // Log activity before deletion
+    try {
+      await logActivity(
+        req,
+        'task_deleted',
+        'task',
+        id,
+        `Deleted task "${task.title}"`,
+        { task_id: id, title: task.title }
+      );
+    } catch (logError) {
+      console.error('Error logging activity:', logError);
+    }
 
     await pool.query('DELETE FROM tasks WHERE id = $1', [id]);
 

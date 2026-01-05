@@ -207,7 +207,7 @@ body {
 }
 
 .chip-error {
-  background: rgba(211, 47, 47, 0.1);
+  background: rgb(255, 255, 255);
   color: var(--error-color);
 }
 
@@ -491,4 +491,19 @@ body {
 .notification-close:hover {
   background: rgba(0, 0, 0, 0.05);
   color: var(--text-primary);
+}
+
+.homepage-logo-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.homepage-logo-button:focus {
+  outline: none;
+}
+
+.auth-homepage-header + .auth-container {
+  min-height: calc(100vh - 64px);
 }
